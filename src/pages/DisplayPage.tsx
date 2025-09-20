@@ -18,7 +18,7 @@ export default function DisplayPage() {
   const overlayRef = useRef<HTMLCanvasElement | null>(null);
 
   // 顔検出（present=顔の有無、boxes=顔の枠）
-  const { present, boxes } = useFace(videoRef.current, {
+  const { present, boxes, ready: faceReady } = useFace(videoRef, {
     scoreThr: 0.5,
     flipHorizontal: false,
   });
@@ -122,7 +122,7 @@ export default function DisplayPage() {
     const tick = () => {
       const frame = grab();
       const bg = bgRef.current;
-      if (frame && bg && cfg.rois.length) {
+      if (faceReady && frame && bg && cfg.rois.length) {
         const inv = cfg.rois.map((r) => {
           const occ = occupancy(frame, bg, r.rect, 2, 30); // step=2, thr=30 は目安
           const state = decideState(occ, cfg.thresholds.low, cfg.thresholds.empty);
@@ -134,7 +134,7 @@ export default function DisplayPage() {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [grab, cfg.rois, cfg.thresholds.low, cfg.thresholds.empty, setInventory]);
+  }, [grab, cfg.rois, cfg.thresholds.low, cfg.thresholds.empty, setInventory, faceReady]);
   // ====== 在庫（占有率）ここまで ======
 
   // 顔の枠をビデオ上にオーバーレイ

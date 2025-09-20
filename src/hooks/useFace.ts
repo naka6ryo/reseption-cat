@@ -1,20 +1,22 @@
 // src/hooks/useFace.ts
 import { useEffect, useRef, useState } from 'react';
+import type { RefObject } from 'react';
 import * as blazeface from '@tensorflow-models/blazeface';
 import * as tf from '@tensorflow/tfjs';
 
 export type FaceBox = { x: number; y: number; w: number; h: number; score: number };
 
 export function useFace(
-  video: HTMLVideoElement | null,
+  videoRef: RefObject<HTMLVideoElement>,
   {
     scoreThr = 0.95,        // 少し緩めに（0.5〜0.7で調整）
     flipHorizontal = false, // 自撮り鏡像にしたい場合は true
-    maxFaces = 5,
+    maxFaces = 3,
   }: { scoreThr?: number; flipHorizontal?: boolean; maxFaces?: number } = {}
 ) {
   const [boxes, setBoxes] = useState<FaceBox[]>([]);
   const [present, setPresent] = useState(false);
+  const [ready, setReady] = useState(false);
   const modelRef = useRef<blazeface.BlazeFaceModel | null>(null);
   const stopRef = useRef(false);
   const loggedRef = useRef(0);
@@ -42,10 +44,16 @@ export function useFace(
         scoreThreshold: scoreThr, // ここも緩めに
       });
 
-      // 1回ウォームアップ（ビデオまだならスキップ可）
-      if (video && video.videoWidth > 0) {
-        try { await modelRef.current.estimateFaces(video, false); } catch {}
+      // 2-3 フレーム程度ウォームアップしてシェーダ等を事前生成
+  const v = videoRef.current;
+  if (v && v.videoWidth > 0) {
+        try {
+          for (let i = 0; i < 3; i++) {
+    await modelRef.current.estimateFaces(v, /*returnTensors=*/ false, /*flipHorizontal=*/ flipHorizontal);
+          }
+        } catch {}
       }
+      setReady(true);
 
       loop();
     })();
@@ -57,7 +65,7 @@ export function useFace(
   const loop = async () => {
     if (stopRef.current) return;
 
-    const v = video;
+  const v = videoRef.current;
     if (v && v.videoWidth > 0 && v.videoHeight > 0 && modelRef.current) {
       // ★ 重要：video をそのまま入れる（canvas 経由はやめる）
       // 返りは { topLeft:[x,y], bottomRight:[x,y], probability:[p] } の配列（ピクセル座標）
@@ -87,8 +95,9 @@ export function useFace(
       setPresent(faces.length > 0);
     }
 
-    requestAnimationFrame(loop);
+  // 軽いスロットリング（約 ~15fps 目安）
+  setTimeout(() => requestAnimationFrame(loop), 66);
   };
 
-  return { present, boxes };
+  return { present, boxes, ready };
 }
