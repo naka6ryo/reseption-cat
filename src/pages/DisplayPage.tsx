@@ -152,6 +152,37 @@ export default function DisplayPage() {
   const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
     ctx.clearRect(0, 0, vw, vh);
 
+    // ROI の表示（在庫状態で色分け）
+    const stateColor = (state: 'ok' | 'low' | 'empty' | undefined) => {
+      switch (state) {
+        case 'empty':
+          return { stroke: '#ef4444', fill: 'rgba(239,68,68,0.15)' }; // red-500
+        case 'low':
+          return { stroke: '#f59e0b', fill: 'rgba(245,158,11,0.15)' }; // amber-500
+        case 'ok':
+          return { stroke: '#22c55e', fill: 'rgba(34,197,94,0.12)' }; // emerald-500
+        default:
+          return { stroke: '#38bdf8', fill: 'rgba(56,189,248,0.12)' }; // sky-400
+      }
+    };
+
+    cfg.rois.forEach((r) => {
+      const inv = inventory.find((i) => i.shelfId === r.id);
+      const colors = stateColor(inv?.state as any);
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = colors.stroke;
+      ctx.fillStyle = colors.fill;
+      ctx.strokeRect(r.rect.x, r.rect.y, r.rect.w, r.rect.h);
+      ctx.fillRect(r.rect.x, r.rect.y, r.rect.w, r.rect.h);
+      // ラベル
+      ctx.font = '14px ui-sans-serif';
+      ctx.fillStyle = 'rgba(0,0,0,0.7)';
+      const label = inv
+        ? `${r.name}  ${(inv.occupied * 100).toFixed(0)}%  ${inv.state}`
+        : r.name;
+      ctx.fillText(label, r.rect.x + 6, r.rect.y + 18);
+    });
+
     boxes.forEach((b) => {
       ctx.lineWidth = 3;
       ctx.strokeStyle = present ? '#22c55e' : '#f97316';
@@ -160,7 +191,7 @@ export default function DisplayPage() {
       ctx.fillStyle = 'rgba(34,197,94,0.85)';
       ctx.fillText(`face ${(b.score * 100).toFixed(0)}%`, b.x + 6, b.y + 18);
     });
-  }, [boxes, present, videoRef.current?.videoWidth, videoRef.current?.videoHeight]);
+  }, [boxes, present, cfg.rois, inventory, videoRef.current?.videoWidth, videoRef.current?.videoHeight]);
 
   return (
     <div className="grid md:grid-cols-2 gap-4 items-start">
@@ -180,7 +211,22 @@ export default function DisplayPage() {
           />
         </div>
 
-        <CatAnimator state={state} />
+        <CatAnimator
+          state={state}
+          subtitle={
+            state === 'WELCOME'
+              ? (() => {
+                  const soldOut = inventory
+                    .filter((i) => i.state === 'empty')
+                    .map((i) => cfg.rois.find((r) => r.id === i.shelfId)?.name)
+                    .filter((n): n is string => !!n);
+                  if (soldOut.length === 0) return undefined;
+                  const names = soldOut.join(' と ');
+                  return `${names} は売り切れました。ごめんなさい。`;
+                })()
+              : undefined
+          }
+        />
 
         <div className="text-sm text-slate-600">
           presence: {present ? '1' : '0'} / faces: {boxes.length} / serial:{' '}

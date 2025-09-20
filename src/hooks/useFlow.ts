@@ -1,17 +1,36 @@
 // src/hooks/useFlow.ts
-import { useRef, useState } from 'react';
-import { speak } from './useSpeech';
+import { useEffect, useRef, useState } from 'react';
+import { speak, speakAll, preloadTTS, initVoiceVox } from './useSpeech';
+import { useAppStore } from '../store/useAppStore';
 
 export type FlowState = 'IDLE' | 'WELCOME' | 'GUIDE' | 'PAY_WAIT' | 'THANKS';
 
 export function useFlow() {
   const [state, setState] = useState<FlowState>('IDLE');
+  const inventory = useAppStore((s) => s.inventory);
+  const rois = useAppStore((s) => s.config.rois);
+
+  // 在庫・ROI変化時に、売り切れ案内を先読み生成
+  useEffect(() => {
+    try {
+      const soldOut = inventory
+        .filter((i) => i.state === 'empty')
+        .map((i) => rois.find((r) => r.id === i.shelfId)?.name)
+        .filter((n): n is string => !!n);
+      if (soldOut.length > 0) {
+        const names = soldOut.join(' と ');
+  const combined = `いらっしゃいませ！ ${names} は売り切れました。ごめんなさい。`;
+        preloadTTS(combined).catch(()=>{});
+      }
+    } catch {}
+  }, [inventory, rois]);
 
   const prevPresent = useRef(false);
   const lastWelcomeAt = useRef(0);
   const lastThanksAt = useRef(0);
   const lastPayAt = useRef(0);
   const lastEnterAt = useRef(0);
+  const welcomeSeq = useRef(0);
 
   // 調整用（必要なら変更OK）
   const WELCOME_COOLDOWN_MS = 5000;
@@ -29,9 +48,25 @@ export function useFlow() {
     if (present && !prevPresent.current) {
       lastEnterAt.current = now;
       if ((now - lastWelcomeAt.current) > WELCOME_COOLDOWN_MS && state === 'IDLE') {
-        lastWelcomeAt.current = now;
+  lastWelcomeAt.current = now;
         setState('WELCOME');
-        safeSpeak('いらっしゃいませ！');
+        welcomeSeq.current += 1;
+        // 一拍（microtask）置いてから在庫を評価（同期状態のズレ対策）
+        queueMicrotask(async () => {
+          try { await initVoiceVox(); } catch {}
+          const soldOut = inventory
+            .filter((i) => i.state === 'empty')
+            .map((i) => rois.find((r) => r.id === i.shelfId)?.name)
+            .filter((n): n is string => !!n);
+          if (soldOut.length > 0) {
+            const names = soldOut.join(' と ');
+            const combined = `いらっしゃいませニャー！  ${names} は売り切れたのにゃ。ごめんなさいにゃーあ。`;
+            try { preloadTTS(combined).catch(()=>{}); } catch {}
+            safeSpeak(combined);
+          } else {
+            safeSpeak('いらっしゃいませニャー！');
+          }
+        });
         setTimeout(() => setState('GUIDE'), 1200);
       }
       prevPresent.current = present;
@@ -52,7 +87,7 @@ export function useFlow() {
       if (canThank) {
         lastThanksAt.current = now;
         setState('THANKS');           // ← THANKSに遷移
-        safeSpeak('ありがとうございます！');
+        safeSpeak('ありがとうございましたニャー！');
         setTimeout(() => setState('IDLE'), THANKS_DURATION_MS); // 表示を維持
         prevPresent.current = present;
         return;                       // ★ ここで早期リターン：IDLEで上書きしない
@@ -81,6 +116,8 @@ export function useFlow() {
       setTimeout(() => setState('IDLE'), THANKS_DURATION_MS);
     }
   }
+
+  // 追補発話はせず、歓迎時点の在庫で一続き発話（元の処理方針）
 
   return { state, onPresence, onPay };
 }

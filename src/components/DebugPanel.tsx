@@ -2,6 +2,7 @@ import { useState } from 'react';
 import InventoryBars from './InventoryBars';
 import { useAppStore } from '../store/useAppStore';
 import type { Inventory } from '../types';
+import { speak } from '../hooks/useSpeech';
 
   // propsに inventory を受け取れるように
 export default function DebugPanel({ onPing, onFakePay, inventory }: { onPing: ()=>void; onFakePay?: ()=>void; inventory?: Inventory[] }) {
@@ -28,6 +29,12 @@ export default function DebugPanel({ onPing, onFakePay, inventory }: { onPing: (
             {onFakePay && (
               <button className="px-3 py-1 rounded bg-slate-200" onClick={onFakePay}>FAKE PAY</button>
             )}
+            <button
+              className="px-3 py-1 rounded bg-emerald-600 text-white"
+              onClick={() => speak('テストです。にゃん。')}
+            >
+              音声テスト
+            </button>
           </div>
           <div className="h-40 overflow-auto border p-2 text-xs bg-slate-50">
             {log.map((l,i)=>(<div key={i}>{l}</div>))}

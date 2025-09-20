@@ -1,7 +1,16 @@
+import { useEffect } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { initVoiceVox, preloadTTS } from '../hooks/useSpeech';
 
 export default function App() {
   const { search } = useLocation();
+  useEffect(() => {
+    // 事前初期化＋短文の事前生成で初回遅延を軽減
+    initVoiceVox().finally(() => {
+  preloadTTS('いらっしゃいませ！').catch(()=>{});
+  preloadTTS('ありがとうございます！').catch(()=>{});
+    });
+  }, []);
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <header className="flex items-center justify-between px-4 py-2 border-b bg-white">
