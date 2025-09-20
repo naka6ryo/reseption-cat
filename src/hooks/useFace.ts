@@ -95,8 +95,8 @@ export function useFace(
       setPresent(faces.length > 0);
     }
 
-  // 軽いスロットリング（約 ~15fps 目安）
-  setTimeout(() => requestAnimationFrame(loop), 66);
+  // 軽いスロットリング（約 ~15fps 目安）: rAFに依存しないで継続実行
+  setTimeout(loop, 66);
   };
 
   return { present, boxes, ready };

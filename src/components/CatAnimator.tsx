@@ -14,13 +14,13 @@ export default memo(function CatAnimator({ state, subtitle }: { state: FlowState
   return (
     <div className="flex flex-col items-center gap-2">
       <img src="/cat-sprite.png" alt="cat" className={`w-64 h-64 object-contain ${cls}`} />
-      <div className="text-xl font-semibold text-center">
+      <div className="text-2xl md:text-3xl font-semibold text-center">
         {state === 'WELCOME' && 'いらっしゃいませ！'}
         {state === 'THANKS' && 'ありがとうございます！'}
         {state !== 'WELCOME' && state !== 'THANKS' && '…'}
       </div>
       {subtitle && (
-        <div className="text-base text-center text-slate-800">
+        <div className="text-xl md:text-2xl text-center text-slate-800">
           {subtitle}
         </div>
       )}

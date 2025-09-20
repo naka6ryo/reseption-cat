@@ -8,15 +8,15 @@ export default function InventoryBars({ data }: { data: Inventory[] }) {
 
   return (
     <div className="space-y-2">
-      {data.map(inv => (
+    {data.map(inv => (
         <div key={inv.shelfId}>
-          <div className="text-xs text-slate-600 mb-1">{name(inv.shelfId)} — {inv.state} ({Math.round(inv.occupied*100)}%)</div>
+      <div className="text-sm text-slate-700 mb-1">{name(inv.shelfId)} — {inv.state}（{Math.round(inv.occupied*100)}%）</div>
           <div className="w-full h-2 bg-slate-200 rounded">
             <div className={`h-2 rounded ${color(inv.state)}`} style={{ width: `${Math.min(100, Math.max(0, inv.occupied*100))}%` }} />
           </div>
         </div>
       ))}
-      {data.length===0 && <div className="text-xs text-slate-500">ROIがありません。</div>}
+    {data.length===0 && <div className="text-sm text-slate-600">棚（ROI）がありません</div>}
     </div>
   );
 }

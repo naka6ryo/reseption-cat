@@ -16,6 +16,12 @@ import { occupancy, decideState } from '../hooks/useInventory';
 export default function DisplayPage() {
   const { videoRef } = useCamera();
   const overlayRef = useRef<HTMLCanvasElement | null>(null);
+  const [leftOpen, setLeftOpen] = useState<boolean>(() => {
+    try { return localStorage.getItem('leftPaneOpen') !== '0'; } catch { return true; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('leftPaneOpen', leftOpen ? '1' : '0'); } catch {}
+  }, [leftOpen]);
 
   // 顔検出（present=顔の有無、boxes=顔の枠）
   const { present, boxes, ready: faceReady } = useFace(videoRef, {
@@ -194,10 +200,31 @@ export default function DisplayPage() {
   }, [boxes, present, cfg.rois, inventory, videoRef.current?.videoWidth, videoRef.current?.videoHeight]);
 
   return (
-    <div className="grid md:grid-cols-2 gap-4 items-start">
-      <div className="flex flex-col items-center gap-3">
+    <div className="flex flex-col gap-3">
+      {/* Top bar with toggle */}
+      <div className="flex items-center justify-end gap-2">
+        <button
+          className="px-3 py-1 rounded border text-sm"
+          onClick={() => setLeftOpen(v => !v)}
+          title={leftOpen ? '左ペインをしまう' : '左ペインをひらく'}
+        >
+          {leftOpen ? '左を閉じる' : '左を開く'}
+        </button>
+      </div>
+
+      <div className="flex flex-row gap-4 items-start">
+      {/* Left Pane: Camera + Debug */}
+        <div
+          className={
+            (leftOpen
+              ? 'flex-1 min-w-0 '
+              : 'w-[1px] flex-[0_0_1px] overflow-hidden opacity-0 pointer-events-none ') +
+            'flex flex-col items-stretch gap-3'
+          }
+          aria-hidden={!leftOpen}
+        >
         {/* ビデオ + オーバーレイ */}
-        <div className="relative w-full max-w-md">
+        <div className="relative w-full">
           <video
             ref={videoRef as any}
             autoPlay
@@ -211,29 +238,12 @@ export default function DisplayPage() {
           />
         </div>
 
-        <CatAnimator
-          state={state}
-          subtitle={
-            state === 'WELCOME'
-              ? (() => {
-                  const soldOut = inventory
-                    .filter((i) => i.state === 'empty')
-                    .map((i) => cfg.rois.find((r) => r.id === i.shelfId)?.name)
-                    .filter((n): n is string => !!n);
-                  if (soldOut.length === 0) return undefined;
-                  const names = soldOut.join(' と ');
-                  return `${names} は売り切れました。ごめんなさい。`;
-                })()
-              : undefined
-          }
-        />
-
-        <div className="text-sm text-slate-600">
+        <div className="text-sm text-slate-600 px-1">
           presence: {present ? '1' : '0'} / faces: {boxes.length} / serial:{' '}
           {connected ? 'connected' : 'disconnected'}
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex gap-2 px-1">
           {!connected && (
             <button
               className="px-3 py-1 rounded bg-indigo-600 text-white"
@@ -251,18 +261,38 @@ export default function DisplayPage() {
             </button>
           )}
         </div>
-      </div>
 
-      <DebugPanel
-        onPing={onPing}
-        onFakePay={
-          useFake && serialRef.current && 'inject' in (serialRef.current as any)
-            ? () => (serialRef.current as any).inject('PAY,1')
-            : undefined
-        }
-        // ★ 在庫バーに渡す
-        inventory={inventory}
-      />
+        <DebugPanel
+          onPing={onPing}
+          onFakePay={
+            useFake && serialRef.current && 'inject' in (serialRef.current as any)
+              ? () => (serialRef.current as any).inject('PAY,1')
+              : undefined
+          }
+          inventory={inventory}
+        />
+        </div>
+
+      {/* Right Pane: Cat and Speech */}
+      <div className="flex-1 min-w-0 flex flex-col items-center gap-3">
+        <CatAnimator
+          state={state}
+          subtitle={
+            state === 'WELCOME'
+              ? (() => {
+                  const soldOut = inventory
+                    .filter((i) => i.state === 'empty')
+                    .map((i) => cfg.rois.find((r) => r.id === i.shelfId)?.name)
+                    .filter((n): n is string => !!n);
+                  if (soldOut.length === 0) return undefined;
+                  const names = soldOut.join(' と ');
+                  return `${names} は売り切れました。ごめんなさい。`;
+                })()
+              : undefined
+          }
+        />
+      </div>
+      </div>
     </div>
   );
 }
