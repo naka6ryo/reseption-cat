@@ -8,7 +8,7 @@ export function useFlow() {
   const [state, setState] = useState<FlowState>('IDLE');
   const prevPresent = useRef(false);
   const lastWelcomeAt = useRef(0);
-  const WELCOME_COOLDOWN_MS = 5000; // 連発防止
+  const WELCOME_COOLDOWN_MS = 1500; // 連発防止
 
   function onPresence(present: boolean) {
     const now = performance.now();

@@ -15,7 +15,7 @@ export default function DisplayPage() {
 
     // 変更後:
     const { present, score } = usePresence(videoRef.current, {
-    enterThr: 0.015,   // お店前で少し動けば入店扱い
+    enterThr: 0.001,   // お店前で少し動けば入店扱い
     exitThr: 0.008,    // 小さく落ちたら退場扱い（ヒステリシス）
     holdMs: 300,       // 0.8秒続いたら入店確定
     emaAlpha: 0.2,     // 平滑化の強さ（0.1~0.3で調整）
