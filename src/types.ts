@@ -10,4 +10,6 @@ export type Config = {
   thresholds: { empty: number; low: number; smoothFrames: number };
   serial: { baudRate: number };
   tts: { rate: number; pitch: number; volume: number; voice?: string };
+  bgDataUrl?: string | null; // ★ 追加：背景画像（dataURL）
 };
+
