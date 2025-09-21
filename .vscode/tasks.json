@@ -23,6 +23,19 @@
 				"$eslint-stylish"
 			],
 			"group": "build"
+		},
+		{
+			"label": "npmcmd:build",
+			"type": "shell",
+			"command": "npm.cmd",
+			"args": [
+				"run",
+				"build"
+			],
+			"problemMatcher": [
+				"$eslint-stylish"
+			],
+			"group": "build"
 		}
 	]
 }

@@ -91,8 +91,13 @@ export default function DisplayPage() {
   };
 
   const handleLine = (line: string) => {
-    pushLog('« ' + line);
-    if (line.startsWith('PAY,1')) onPay();
+    const msg = line.trim(); // 余分な改行や空白を除去
+    pushLog('« ' + msg);
+
+    // 既存の "PAY,1" に加えて、単独の "1" でもお礼フローを発火
+    if (msg.startsWith('PAY,1') || msg === '1') {
+      onPay();
+    }
   };
 
   const onPing = async () => {
