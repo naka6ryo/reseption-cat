@@ -12,7 +12,8 @@ export function useFace(
     scoreThr = 0.95,        // 少し緩めに（0.5〜0.7で調整）
     flipHorizontal = false, // 自撮り鏡像にしたい場合は true
     maxFaces = 3,
-  }: { scoreThr?: number; flipHorizontal?: boolean; maxFaces?: number } = {}
+    exitHoldMs = 500,       // ★ 追加: 連続で見えなくなってから不在にする待ち時間
+  }: { scoreThr?: number; flipHorizontal?: boolean; maxFaces?: number; exitHoldMs?: number } = {}
 ) {
   const [boxes, setBoxes] = useState<FaceBox[]>([]);
   const [present, setPresent] = useState(false);
@@ -20,6 +21,7 @@ export function useFace(
   const modelRef = useRef<blazeface.BlazeFaceModel | null>(null);
   const stopRef = useRef(false);
   const loggedRef = useRef(0);
+  const lastSeenAtRef = useRef(0);
 
   useEffect(() => {
     stopRef.current = false;
@@ -92,7 +94,14 @@ export function useFace(
       }
 
       setBoxes(faces);
-      setPresent(faces.length > 0);
+      const now = performance.now();
+      if (faces.length > 0) {
+        lastSeenAtRef.current = now;
+        setPresent(true);
+      } else {
+        const stillHold = (now - lastSeenAtRef.current) < exitHoldMs;
+        setPresent(stillHold ? true : false);
+      }
     }
 
   // 軽いスロットリング（約 ~15fps 目安）: rAFに依存しないで継続実行

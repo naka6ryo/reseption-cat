@@ -7,7 +7,14 @@ import type { ShelfROI } from '../types';
 
 export default function SetupPage() {
   const cfg = useAppStore(s=>s.config);
-  const { videoRef } = useCamera(); // ★ 追加：プレビューから背景を取る
+  // メイン画面と同じカメラ設定を適用（deviceId優先、なければfacingMode）
+  const videoConstraints: MediaStreamConstraints = {
+    video: cfg.camera?.deviceId
+      ? { deviceId: { exact: cfg.camera.deviceId } as any }
+      : { facingMode: (cfg.camera?.facingMode ?? 'environment') as any },
+    audio: false,
+  };
+  const { videoRef } = useCamera(videoConstraints); // プレビューから背景を取る
   const setConfig = useAppStore(s=>s.setConfig);
   const [empty, setEmpty] = useState(cfg.thresholds.empty);
   const [low, setLow] = useState(cfg.thresholds.low);

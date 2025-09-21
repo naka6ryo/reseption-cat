@@ -40,6 +40,10 @@ function vvSet(key: string, buf: ArrayBuffer) {
 export async function speak(text: string, opt?: Partial<SpeechSynthesisUtterance> & { voiceName?: string }) {
   const cfg = useAppStore.getState?.().config.tts;
   const engine = cfg?.engine ?? 'web';
+  if (engine === 'none') {
+    ttsLog(`silent: ${text}`);
+    return;
+  }
   if (engine === 'voicevox') {
     try {
       await speakWithVoiceVox(text, { speaker: cfg?.voicevoxSpeaker ?? 3 });
@@ -47,7 +51,11 @@ export async function speak(text: string, opt?: Partial<SpeechSynthesisUtterance
     } catch (e) {
   console.warn('VOICEVOX speak failed', e);
   ttsLog(`speak failed: ${String((e as any)?.message || e)}`);
-      return; // フォールバックしない（声が混ざらないように）
+      if (cfg?.allowFallbackToWeb) {
+        ttsLog('fallback to Web Speech');
+      } else {
+        return; // フォールバックしない（声が混ざらないように）
+      }
     }
   }
   const preferred = opt?.voiceName ?? cfg?.voice;
@@ -64,18 +72,40 @@ export async function speakAll(texts: string[], opt?: Partial<SpeechSynthesisUtt
   if (!texts.length) return;
   const cfg = useAppStore.getState?.().config.tts;
   const engine = cfg?.engine ?? 'web';
+  if (engine === 'none') {
+    texts.forEach(t => ttsLog(`silent: ${t}`));
+    return;
+  }
   if (engine === 'voicevox') {
-    try {
-  const speaker = cfg?.voicevoxSpeaker ?? 3;
-  // 先に全てを並列でキャッシュしてから、直列で再生
-      await Promise.allSettled(texts.map((t) => fetchVoiceVoxBuffer(t, speaker).then((buf)=>{ vvSet(vvKey(t, speaker), buf); })));
-  for (const t of texts) await speakWithVoiceVox(t, { speaker });
-      return;
-    } catch (e) {
-      console.warn('VOICEVOX speakAll failed', e);
-  ttsLog(`speakAll failed: ${String((e as any)?.message || e)}`);
-      return; // フォールバックしない
+    const speaker = cfg?.voicevoxSpeaker ?? 3;
+    // 各フレーズを順に処理。取得失敗時はそのフレーズのみログ、許可されればWebへフォールバック。
+    for (const t of texts) {
+      try {
+        // 既にキャッシュがあれば即再生、無ければ取得→再生
+        const key = vvKey(t, speaker);
+        const cached = vvCache.get(key)?.buf;
+        if (cached) {
+          try { await speakWithVoiceVox(t, { speaker }); } catch (e) { throw e; }
+        } else {
+          const buf = await fetchVoiceVoxBuffer(t, speaker);
+          vvSet(key, buf);
+          await speakWithVoiceVox(t, { speaker });
+        }
+      } catch (e: any) {
+        ttsLog(`speakAll item failed: ${String(e?.message || e)}`);
+        if (cfg?.allowFallbackToWeb) {
+          const u = new SpeechSynthesisUtterance(t);
+          Object.assign(u, { rate: cfg?.rate ?? 1.0, pitch: cfg?.pitch ?? 1.0, volume: cfg?.volume ?? 1.0 }, opt);
+          const v = resolveVoice(opt?.voiceName ?? cfg?.voice);
+          if (v) u.voice = v;
+          try { speechSynthesis.cancel(); } catch {}
+          speechSynthesis.speak(u);
+        } else {
+          // フォールバック不可: 次のフレーズへ継続
+        }
+      }
     }
+    return;
   }
   const preferred = opt?.voiceName ?? cfg?.voice;
   const voice = resolveVoice(preferred);
@@ -159,14 +189,15 @@ function playDecoded(buffer: AudioBuffer): Promise<void> {
 
 async function fetchVoiceVoxBuffer(text: string, speaker: number): Promise<ArrayBuffer> {
   const tts = useAppStore.getState?.().config.tts;
-  const tQuery = 5000; // audio_query timeout
+  // タイムアウト: audio_queryは10s、synthesisはテキスト長に応じて最大35s
+  const tQuery = 10000; // audio_query timeout
   const query = await vvFetchWithRetry(async () => {
     const res = await vvFetch(`/api/voicevox/audio_query?speaker=${speaker}&text=${encodeURIComponent(text)}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }
     }, tQuery);
     if (!res.ok) throw new Error('voicevox audio_query failed');
     return res.json();
-  });
+  }, 'audio_query');
   // パラメータ調整（必要に応じて）
   if (query) {
     // VOICEVOXのaudio_queryには次のようなフィールドがある: speedScale, pitchScale, intonationScale など
@@ -174,14 +205,14 @@ async function fetchVoiceVoxBuffer(text: string, speaker: number): Promise<Array
     if (typeof tts?.pitch === 'number') query.pitchScale = tts.pitch - 1; // pitch=1 を基準(0)として微調整
     if (typeof tts?.voicevoxIntonation === 'number') query.intonationScale = tts.voicevoxIntonation;
   }
-  const tSynth = Math.min(20000, 4000 + text.length * 60); // length-aware timeout
+  const tSynth = Math.min(35000, 6000 + text.length * 90); // length-aware timeout
   const buf = await vvFetchWithRetry(async () => {
     const res = await vvFetch(`/api/voicevox/synthesis?speaker=${speaker}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(query)
     }, tSynth);
     if (!res.ok) throw new Error('voicevox synthesis failed');
     return res.arrayBuffer();
-  });
+  }, 'synthesis');
   return buf;
 }
 
@@ -221,14 +252,22 @@ export async function initVoiceVox(): Promise<void> {
 function vvFetch(input: RequestInfo, init?: RequestInit, timeoutMs = 3000): Promise<Response> {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
-  return fetch(input, { ...init, signal: controller.signal }).finally(() => clearTimeout(id));
+  return fetch(input, { ...init, signal: controller.signal })
+    .catch((e) => {
+      if ((e as any)?.name === 'AbortError') {
+        // 明確なメッセージにしてログ上で分かりやすく
+        throw new Error('timeout');
+      }
+      throw e;
+    })
+    .finally(() => clearTimeout(id));
 }
 
-async function vvFetchWithRetry<T>(fn: () => Promise<T>, retries = 2): Promise<T> {
+async function vvFetchWithRetry<T>(fn: () => Promise<T>, label: string, retries = 2): Promise<T> {
   let lastErr: any;
   for (let i = 0; i <= retries; i++) {
     try { return await fn(); } catch (e) { lastErr = e; }
   }
-  ttsLog(`fetch failed after retries: ${String((lastErr as any)?.message || lastErr)}`);
+  ttsLog(`${label} fetch failed after retries: ${String((lastErr as any)?.message || lastErr)}`);
   throw lastErr;
 }

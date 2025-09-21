@@ -14,7 +14,14 @@ import { useFrameGrabber } from '../hooks/useFrame';
 import { occupancy, decideState } from '../hooks/useInventory';
 
 export default function DisplayPage() {
-  const { videoRef } = useCamera();
+  const cfg = useAppStore((s) => s.config);
+  const videoConstraints: MediaStreamConstraints = useMemo(() => {
+    const devId = cfg.camera?.deviceId || undefined;
+    if (devId) return { video: { deviceId: { exact: devId } }, audio: false };
+    const facing = cfg.camera?.facingMode || 'environment';
+    return { video: { facingMode: facing }, audio: false };
+  }, [cfg.camera?.deviceId, cfg.camera?.facingMode]);
+  const { videoRef } = useCamera(videoConstraints);
   const overlayRef = useRef<HTMLCanvasElement | null>(null);
   const [leftOpen, setLeftOpen] = useState<boolean>(() => {
     try { return localStorage.getItem('leftPaneOpen') !== '0'; } catch { return true; }
@@ -24,15 +31,18 @@ export default function DisplayPage() {
   }, [leftOpen]);
 
   // 顔検出（present=顔の有無、boxes=顔の枠）
+  // 顔が見えなくなってから不在にするまでの保持時間（ms）
+  const FACE_EXIT_HOLD_MS = 3000; // 後から変更しやすいように定数化
   const { present, boxes, ready: faceReady } = useFace(videoRef, {
     scoreThr: 0.5,
     flipHorizontal: false,
+    exitHoldMs: FACE_EXIT_HOLD_MS,
   });
 
   const { state, onPresence, onPay } = useFlow();
   const pushLog = useAppStore((s) => s.pushLog);
   const baud = useAppStore((s) => s.config.serial.baudRate);
-  const cfg = useAppStore((s) => s.config);
+  // cfg is already defined above
   const setConfig = useAppStore((s) => s.setConfig);
   const setInventory = useAppStore((s) => s.setInventory);
   const inventory = useAppStore((s) => s.inventory);
@@ -277,6 +287,10 @@ export default function DisplayPage() {
       <div className="flex-1 min-w-0 flex flex-col items-center gap-3">
         <CatAnimator
           state={state}
+          present={present}
+          soldOutAtWelcome={
+            state === 'WELCOME' && inventory.some((i) => i.state === 'empty')
+          }
           subtitle={
             state === 'WELCOME'
               ? (() => {

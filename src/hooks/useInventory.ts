@@ -1,6 +1,6 @@
 import type { Inventory, ShelfROI } from '../types';
 
-export function occupancy(frame: ImageData, bg: ImageData, roi: {x:number;y:number;w:number;h:number}, step=2, thr=30) {
+export function occupancy(frame: ImageData, bg: ImageData, roi: {x:number;y:number;w:number;h:number}, step=2, thr=40) {
   const { width } = frame; const f = frame.data, b = bg.data; let total=0, diff=0;
   for (let y=roi.y; y<roi.y+roi.h; y+=step) {
     for (let x=roi.x; x<roi.x+roi.w; x+=step) {
