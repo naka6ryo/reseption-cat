@@ -1,0 +1,112 @@
+// src/hooks/useFace.ts
+import { useEffect, useRef, useState } from 'react';
+import type { RefObject } from 'react';
+import * as blazeface from '@tensorflow-models/blazeface';
+import * as tf from '@tensorflow/tfjs';
+
+export type FaceBox = { x: number; y: number; w: number; h: number; score: number };
+
+export function useFace(
+  videoRef: RefObject<HTMLVideoElement>,
+  {
+    scoreThr = 0.95,        // 少し緩めに（0.5〜0.7で調整）
+    flipHorizontal = false, // 自撮り鏡像にしたい場合は true
+    maxFaces = 3,
+    exitHoldMs = 500,       // ★ 追加: 連続で見えなくなってから不在にする待ち時間
+  }: { scoreThr?: number; flipHorizontal?: boolean; maxFaces?: number; exitHoldMs?: number } = {}
+) {
+  const [boxes, setBoxes] = useState<FaceBox[]>([]);
+  const [present, setPresent] = useState(false);
+  const [ready, setReady] = useState(false);
+  const modelRef = useRef<blazeface.BlazeFaceModel | null>(null);
+  const stopRef = useRef(false);
+  const loggedRef = useRef(0);
+  const lastSeenAtRef = useRef(0);
+
+  useEffect(() => {
+    stopRef.current = false;
+
+    (async () => {
+      // backend 初期化（webgl → ダメなら cpu）
+      try { await tf.setBackend('webgl'); } catch {}
+      await tf.ready();
+      if (tf.getBackend() !== 'webgl') {
+        // 一部環境で webgl が封鎖されていることがある
+        try { await tf.setBackend('cpu'); await tf.ready(); } catch {}
+      }
+      if (loggedRef.current < 3) {
+        console.debug('[face] tf backend:', tf.getBackend());
+        loggedRef.current++;
+      }
+
+      // モデル読込（しきい値はここでも指定できる）
+      modelRef.current = await blazeface.load({
+        maxFaces,
+        iouThreshold: 0.3,
+        scoreThreshold: scoreThr, // ここも緩めに
+      });
+
+      // 2-3 フレーム程度ウォームアップしてシェーダ等を事前生成
+  const v = videoRef.current;
+  if (v && v.videoWidth > 0) {
+        try {
+          for (let i = 0; i < 3; i++) {
+    await modelRef.current.estimateFaces(v, /*returnTensors=*/ false, /*flipHorizontal=*/ flipHorizontal);
+          }
+        } catch {}
+      }
+      setReady(true);
+
+      loop();
+    })();
+
+    return () => { stopRef.current = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const loop = async () => {
+    if (stopRef.current) return;
+
+  const v = videoRef.current;
+    if (v && v.videoWidth > 0 && v.videoHeight > 0 && modelRef.current) {
+      // ★ 重要：video をそのまま入れる（canvas 経由はやめる）
+      // 返りは { topLeft:[x,y], bottomRight:[x,y], probability:[p] } の配列（ピクセル座標）
+      let preds: any[] = [];
+      try {
+        preds = await modelRef.current.estimateFaces(v, /*returnTensors=*/ false, /*flipHorizontal=*/ flipHorizontal);
+      } catch (e) {
+        if (loggedRef.current < 3) { console.debug('[face] estimate error:', e); loggedRef.current++; }
+        preds = [];
+      }
+
+      const faces: FaceBox[] = [];
+      for (const p of preds) {
+        const prob = Array.isArray(p.probability) ? Number(p.probability[0] ?? 0) : (p.probability ?? 0);
+        if (prob < scoreThr) continue;
+        const [x1, y1] = Array.isArray(p.topLeft) ? p.topLeft : [p.topLeft[0], p.topLeft[1]];
+        const [x2, y2] = Array.isArray(p.bottomRight) ? p.bottomRight : [p.bottomRight[0], p.bottomRight[1]];
+        faces.push({ x: Number(x1), y: Number(y1), w: Number(x2 - x1), h: Number(y2 - y1), score: prob });
+      }
+
+      if (loggedRef.current < 3) {
+        console.debug('[face] faces:', faces.length, faces[0]);
+        loggedRef.current++;
+      }
+
+      setBoxes(faces);
+      const now = performance.now();
+      if (faces.length > 0) {
+        lastSeenAtRef.current = now;
+        setPresent(true);
+      } else {
+        const stillHold = (now - lastSeenAtRef.current) < exitHoldMs;
+        setPresent(stillHold ? true : false);
+      }
+    }
+
+  // 軽いスロットリング（約 ~15fps 目安）: rAFに依存しないで継続実行
+  setTimeout(loop, 66);
+  };
+
+  return { present, boxes, ready };
+}

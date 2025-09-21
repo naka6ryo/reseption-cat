@@ -6,7 +6,9 @@ const defaultCfg: Config = {
   items: [],
   thresholds: { empty: 0.15, low: 0.35, smoothFrames: 5 },
   serial: { baudRate: 115200 },
-  tts: { rate: 1, pitch: 1, volume: 1 },
+  camera: { facingMode: 'environment', deviceId: null },
+  tts: { rate: 1, pitch: 1, volume: 1, engine: 'none', voicevoxSpeaker: 3, voicevoxIntonation: 2, allowFallbackToWeb: false },
+  bgDataUrl: null, // ★ 追加
 };
 
 type State = {
@@ -26,3 +28,4 @@ export const useAppStore = create<State>((set, get) => ({
   serialLog: [],
   pushLog: (l) => set({ serialLog: [...get().serialLog.slice(-200), l] }),
 }));
+
