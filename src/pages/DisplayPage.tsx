@@ -140,7 +140,7 @@ export default function DisplayPage() {
       const bg = bgRef.current;
       if (faceReady && frame && bg && cfg.rois.length) {
         const inv = cfg.rois.map((r) => {
-          const occ = occupancy(frame, bg, r.rect, 2, 30); // step=2, thr=30 は目安
+          const occ = occupancy(frame, bg, r.rect, 2, 140); // step=2, thr=30 は目安
           const state = decideState(occ, cfg.thresholds.low, cfg.thresholds.empty);
           return { shelfId: r.id, occupied: occ, state };
         });

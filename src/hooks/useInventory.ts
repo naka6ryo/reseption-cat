@@ -1,16 +1,31 @@
 import type { Inventory, ShelfROI } from '../types';
 
-export function occupancy(frame: ImageData, bg: ImageData, roi: {x:number;y:number;w:number;h:number}, step=2, thr=40) {
-  const { width } = frame; const f = frame.data, b = bg.data; let total=0, diff=0;
-  for (let y=roi.y; y<roi.y+roi.h; y+=step) {
-    for (let x=roi.x; x<roi.x+roi.w; x+=step) {
-      const i = (y*width + x) * 4;
-      const fy = 0.299*f[i] + 0.587*f[i+1] + 0.114*f[i+2];
-      const by = 0.299*b[i] + 0.587*b[i+1] + 0.114*b[i+2];
-      if (Math.abs(fy - by) > thr) diff++; total++;
+// 占有率: RGBのユークリッド距離 d = sqrt((ΔR)^2 + (ΔG)^2 + (ΔB)^2)
+// パフォーマンスのため sqrt は避け、(ΔR^2 + ΔG^2 + ΔB^2) > thr^2 で判定します。
+// しきい値の目安: 60〜100 程度（環境光やカメラノイズに合わせて調整）
+export function occupancy(
+  frame: ImageData,
+  bg: ImageData,
+  roi: { x: number; y: number; w: number; h: number },
+  step = 2,
+  thr = 40,
+) {
+  const { width } = frame;
+  const f = frame.data, b = bg.data;
+  let total = 0, diff = 0;
+  const thr2 = thr * thr;
+  for (let y = roi.y; y < roi.y + roi.h; y += step) {
+    for (let x = roi.x; x < roi.x + roi.w; x += step) {
+      const i = (y * width + x) * 4;
+      const dr = f[i] - b[i];
+      const dg = f[i + 1] - b[i + 1];
+      const db = f[i + 2] - b[i + 2];
+      const d2 = dr * dr + dg * dg + db * db;
+      if (d2 > thr2) diff++;
+      total++;
     }
   }
-  return total? diff/total : 0;
+  return total ? diff / total : 0;
 }
 
 export function decideState(occ: number, low: number, empty: number): 'ok'|'low'|'empty' {
