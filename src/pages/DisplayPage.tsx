@@ -48,6 +48,7 @@ export default function DisplayPage() {
   const inventory = useAppStore((s) => s.inventory);
 
   const [connected, setConnected] = useState(false);
+  const [lastRx, setLastRx] = useState<string | null>(null);
   const serialRef = useRef<{
     writeLine: (s: string) => Promise<void>;
     disconnect: () => Promise<void>;
@@ -93,6 +94,7 @@ export default function DisplayPage() {
   const handleLine = (line: string) => {
     const msg = line.trim(); // 余分な改行や空白を除去
     pushLog('« ' + msg);
+    setLastRx(msg);
 
     // 既存の "PAY,1" に加えて、単独の "1" でもお礼フローを発火
     if (msg.startsWith('PAY,1') || msg === '1') {
@@ -255,7 +257,7 @@ export default function DisplayPage() {
 
         <div className="text-sm text-slate-600 px-1">
           presence: {present ? '1' : '0'} / faces: {boxes.length} / serial:{' '}
-          {connected ? 'connected' : 'disconnected'}
+          {connected ? 'connected' : 'disconnected'}{lastRx ? ` / rx: ${lastRx}` : ''}
         </div>
 
         <div className="flex gap-2 px-1">
